@@ -1,0 +1,37 @@
+{% from '_macros.html' import icon %}
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>{% block title %}工作台{% endblock %} · 海序订舱</title><link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v='ocean-waves-1') }}"><script defer src="{{ url_for('static', filename='js/app.js', v='ocean-waves-1') }}"></script><link rel="icon" type="image/svg+xml" href="/static/favicon.svg"></head>
+<body class="workspace-v2 {% block page_class %}{% endblock %}">
+<a class="skip-link" href="#main">跳转至主要内容</a>
+<div class="mobile-overlay" data-close-nav></div>
+<aside class="sidebar" id="sidebar" aria-label="主导航">
+  <div class="sidebar-sea" data-sidebar-sea aria-hidden="true"></div>
+  <a class="brand" href="/"><span class="brand-mark">{{ icon('ship',27) }}</span><span>海序<span class="brand-sub">航次与订舱管理</span></span></a>
+  <div class="nav-section">业务操作</div>
+  <nav>
+    <a class="nav-link {{ 'active' if request.path == '/' }}" href="/">{{ icon('grid') }}<span>工作台</span></a>
+    <a class="nav-link {{ 'active' if request.path.startswith('/voyages') }}" href="/voyages">{{ icon('ship') }}<span>航次与舱位</span></a>
+    {% if has_role('SALES','REVIEWER') %}<a class="nav-link {{ 'active' if request.path.startswith('/bookings') }}" href="/bookings">{{ icon('file') }}<span>{{ '订舱工作台' if has_role('SALES') else '订舱审核' }}</span></a>{% endif %}
+    {% if has_role('ANALYST') %}<div class="nav-section">经营分析</div><a class="nav-link {{ 'active' if request.path.startswith('/reports') }}" href="/reports">{{ icon('chart') }}<span>经营报表</span></a>{% endif %}
+    {% if has_role('ADMIN') %}<div class="nav-section">系统管理</div><a class="nav-link {{ 'active' if request.path.startswith('/masters') }}" href="/masters/customers">{{ icon('database') }}<span>基础资料</span></a><a class="nav-link {{ 'active' if request.path.startswith('/users') }}" href="/users">{{ icon('users') }}<span>用户与权限</span></a><a class="nav-link {{ 'active' if request.path.startswith('/audit') }}" href="/audit">{{ icon('clock') }}<span>操作审计</span></a>{% endif %}
+  </nav>
+  <div class="sidebar-clock" data-live-clock role="group" aria-label="北京时间">
+    <span class="clock-zone">北京时间</span>
+    <time class="clock-time" data-clock-time>--:--:--</time>
+    <span class="clock-date" data-clock-date></span>
+  </div>
+  
+</aside>
+<div class="app-shell">
+  <header class="topbar"><div class="topbar-left"><button class="icon-button mobile-menu" type="button" data-toggle-nav aria-label="展开导航" aria-controls="sidebar" aria-expanded="false">{{ icon('menu') }}</button><span class="breadcrumb">{% block breadcrumb %}业务管理{% endblock %}</span></div><div class="topbar-user"><span class="user-avatar">{{ current_user.display_name[:1] if current_user else '访' }}</span><div class="user-info"><strong>{{ current_user.display_name if current_user else '访客' }}</strong><span>{% if current_user %}{{ current_user.username }}{% endif %}</span></div>{% if current_user %}<form action="/logout" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-button logout-button" title="退出登录" aria-label="退出登录">{{ icon('logout',18) }}</button></form>{% endif %}</div></header>
+  <main id="main" class="main-content">
+    {% with messages = get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert alert-{{ category }}" role="alert"><span>{{ icon('check' if category == 'success' else 'info',19) }}</span><div>{{ message }}</div><button class="icon-button" type="button" data-dismiss aria-label="关闭提示">{{ icon('close',16) }}</button></div>{% endfor %}{% endwith %}
+    <div class="page-heading"><div><h1>{% block page_title %}工作台{% endblock %}</h1>{% set description %}{% block page_description %}{% endblock %}{% endset %}{% if description|trim %}<p class="page-description">{{ description }}</p>{% endif %}</div><div class="page-actions">{% block page_actions %}{% endblock %}</div></div>
+    {% block content %}{% endblock %}
+    <footer class="page-footer"><span>全部时刻均为北京时间</span></footer>
+  </main>
+</div>
+<script defer src="{{ url_for('static', filename='js/sidebar-waves.js', v='1') }}"></script>
+{% block scripts %}{% endblock %}
+</body></html>

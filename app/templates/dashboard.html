@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon,status,empty %}
+{% block page_class %}dashboard-home{% endblock %}
+{% block title %}工作台{% endblock %}
+{% block breadcrumb %}工作台{% endblock %}
+{% block page_title %}工作台{% endblock %}
+{% block page_description %}
+  {% if has_role('REVIEWER') %}
+  {% elif has_role('SALES') %}查找可订航次，跟进我的订舱。
+  {% elif has_role('ADMIN') %}航次计划与基础资料集中管理。
+  {% elif has_role('ANALYST') %}查看已确认业务量与航线经营数据。
+  {% else %}查看航次计划与舱位。{% endif %}
+{% endblock %}
+{% block page_actions %}
+  {% if has_role('REVIEWER') %}<a class="btn btn-primary" href="/bookings?status=SUBMITTED">{{ icon('check',18) }}审核订舱</a>
+  {% elif has_role('SALES') %}<a class="btn btn-primary" href="/bookings/new">{{ icon('plus',18) }}新建订舱</a>
+  {% elif has_role('ADMIN') %}<a class="btn btn-primary" href="/voyages/new">{{ icon('plus',18) }}新建航次</a>
+  {% elif has_role('ANALYST') %}<a class="btn btn-primary" href="/reports">{{ icon('chart',18) }}查看报表</a>{% endif %}
+{% endblock %}
+{% macro metric(label,value,unit='',tone='') %}
+<div class="overview-metric {{ tone }}"><span class="metric-label">{{ label }}</span><div class="metric-number">{{ value }}{% if unit %}<small>{{ unit }}</small>{% endif %}</div></div>
+{% endmacro %}
+{% macro shortcut(href,label,symbol) %}
+<a class="task-link" href="{{ href }}"><span>{{ icon(symbol,19) }}{{ label }}</span>{{ icon('chevron',16) }}</a>
+{% endmacro %}
+{% block content %}
+<div class="workspace-grid dashboard-layout">
+  <div class="workspace-primary">
+    <section class="overview-band" aria-label="关键指标">
+      {{ metric('开放可订航次',stats.open_voyages|num,'个') }}
+      {% if has_role('REVIEWER') %}
+        {{ metric('待我审核',stats.reviewable|num,'笔','metric-attention') }}
+        {{ metric('已确认舱位',stats.confirmed_teu|num,'TEU') }}
+      {% elif has_role('SALES') %}
+        {{ metric('我的订舱',stats.my_bookings|num,'笔') }}
+        {{ metric('我的待审订舱',stats.pending_bookings|num,'笔','metric-attention') }}
+      {% elif has_role('ANALYST') %}
+        {{ metric('已确认订舱',analysis_summary.confirmed_bookings|num,'笔') }}
+        {{ metric('已确认舱位',analysis_summary.total_teu|num,'TEU') }}
+      {% else %}
+        {{ metric('未来 7 天离港',stats.departing_soon|num,'个') }}
+        {{ metric('最近截单',next_cutoff.strftime('%m月%d日') if next_cutoff else '暂无','','metric-date') }}
+      {% endif %}
+    </section>
+    <section class="panel dashboard-records" data-workspace-tabs>
+      <div class="workspace-tabbar" role="tablist" aria-label="工作台业务列表" hidden>
+        {% if has_role('SALES','REVIEWER') %}<button type="button" role="tab" id="tab-bookings" aria-controls="panel-bookings" aria-selected="true" tabindex="0">{{ '待审核订舱' if has_role('REVIEWER') else '我的近期订舱' }}<span class="tab-count">{{ stats.reviewable if has_role('REVIEWER') else stats.my_bookings }}</span></button>{% endif %}
+        <button type="button" role="tab" id="tab-voyages" aria-controls="panel-voyages" aria-selected="{{ 'false' if has_role('SALES','REVIEWER') else 'true' }}" tabindex="{{ '-1' if has_role('SALES','REVIEWER') else '0' }}">可订航次<span class="tab-count">{{ stats.open_voyages }}</span></button>
+      </div>
+    {% if has_role('SALES','REVIEWER') %}
+    {% set review=has_role('REVIEWER') %}
+    {% set rows=pending_bookings if review else recent_bookings %}
+    <section class="workspace-table" id="panel-bookings" data-workspace-panel>
+      <div class="panel-heading"><div><h2>{{ '待审核订舱' if review else '我的近期订舱' }}</h2>{% if review %}<p>按单号顺序展示，不含本人创建的订单</p>{% endif %}</div><a class="text-link" href="/bookings{{ '?status=SUBMITTED' if review else '' }}">查看全部 {{ icon('chevron',15) }}</a></div>
+      {% if rows %}
+      <div class="table-wrap"><table>
+        <thead><tr><th>订舱单 / 客户</th><th>航次 / 航线</th><th class="numeric">需求 TEU</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>{% for b in rows %}<tr>
+          <td><a class="primary-link mono" href="/bookings/{{ b.booking_id }}">{{ b.booking_no }}</a><span class="cell-sub">{{ b.customer_name }}</span></td>
+          <td><strong>{{ b.voyage_no }}</strong><span class="cell-sub">{{ b.origin_port_name }} → {{ b.destination_port_name }}</span></td>
+          <td class="numeric">{{ b.total_teu|num }}</td><td>{{ status(b.status) }}</td>
+          <td><a class="text-link" href="/bookings/{{ b.booking_id }}">{{ '审核' if review else '详情' }}{{ icon('chevron',14) }}</a></td>
+        </tr>{% endfor %}</tbody>
+      </table></div>
+      {% else %}{{ empty('暂无待审订单' if review else '暂无订舱记录','提交后的他人订单会显示在这里。' if review else '选择航次，创建第一笔订舱。','' if review else '/bookings/new','' if review else '新建订舱') }}{% endif %}
+    </section>
+    {% endif %}
+    <section class="workspace-table" id="panel-voyages" data-workspace-panel>
+      <div class="panel-heading"><div><h2>近期可订航次</h2><p>按计划离港时间排序 · 最多显示 5 条</p></div><a class="text-link" href="/voyages">全部航次 {{ icon('chevron',15) }}</a></div>
+      {% if upcoming_voyages %}
+      <div class="table-wrap"><table class="voyage-overview">
+        <thead><tr><th>航次 / 航线</th><th>订舱截止</th><th>计划离港</th><th class="numeric">余量 TEU</th></tr></thead>
+        <tbody>{% for v in upcoming_voyages %}<tr>
+          <td><a class="primary-link mono" href="/voyages?q={{ v.voyage_no|urlencode }}">{{ v.voyage_no }}</a><span class="cell-sub route-label">{{ v.origin_port_name }} {{ icon('arrow',13) }} {{ v.destination_port_name }}</span></td>
+          <td class="mono nowrap">{{ v.booking_cutoff_at|datetime }}</td><td class="mono nowrap">{{ v.departure_at|datetime }}</td>
+          <td class="numeric"><div class="capacity-reading"><strong class="capacity-value">{{ v.remaining_teu|num }}</strong><span>/ {{ v.saleable_teu|num }}</span></div><div class="capacity-meter" role="img" aria-label="可用 {{ v.remaining_teu|num }} TEU，总配额 {{ v.saleable_teu|num }} TEU"><span style="width:{{ [100,[0,(v.remaining_teu / v.saleable_teu * 100 if v.saleable_teu else 0)]|max]|min }}%"></span></div></td>
+        </tr>{% endfor %}</tbody>
+      </table></div>
+      {% else %}{{ empty('暂无可订航次','可查看航次列表了解计划，或由管理员发布新航次。') }}{% endif %}
+    </section>
+    </section>
+    {% if has_role('ANALYST') %}
+    <section class="analysis-note"><div><h2>经营数据</h2><p>已确认总毛重 <strong>{{ (analysis_summary.total_gross_kg/1000)|num(2) }} 吨</strong> · 全部日期</p></div><a class="text-link" href="/reports">查看趋势与客户排行 {{ icon('arrow',16) }}</a></section>
+    {% endif %}
+  </div>
+  <aside class="workspace-rail">
+    <section class="panel task-panel">
+      <div class="panel-heading"><h2>{{ '管理入口' if has_role('ADMIN') and not has_role('SALES','REVIEWER','ANALYST') else '常用操作' }}</h2></div>
+      {% set actions=[] %}
+      {% if has_role('REVIEWER') %}{% set actions=actions+[('/bookings?status=SUBMITTED','处理待审订单','check')] %}{% endif %}
+      {% if has_role('SALES') %}{% set actions=actions+[('/bookings/new','新建订舱','plus')] %}{% endif %}
+      {% if has_role('ADMIN') %}{% set actions=actions+[('/voyages/new','新建航次','ship')] %}{% endif %}
+      {% if has_role('ANALYST') %}{% set actions=actions+[('/reports','统计与导出','chart')] %}{% endif %}
+      {% if has_role('ADMIN') %}{% set actions=actions+[('/masters/customers','维护基础资料','database'),('/users','用户与权限','users'),('/audit','操作审计','clock')] %}{% endif %}
+      {% if has_role('SALES') %}{% set actions=actions+[('/bookings','订舱工作台','file')] %}{% endif %}
+      {% if not actions %}{% set actions=[('/voyages','查看航次','ship')] %}{% endif %}
+      <div class="task-links">
+        {% for href,label,symbol in actions[:4] %}{{ shortcut(href,label,symbol) }}{% endfor %}
+      </div>
+    </section>
+    <section class="cutoff-note"><span>{{ icon('clock',17) }} 最近订舱截止</span><strong>{{ next_cutoff|datetime if next_cutoff else '暂无开放航次' }}</strong><a href="/voyages" class="text-link">查看航次余量 {{ icon('chevron',14) }}</a></section>
+    <details class="workspace-help panel"><summary>操作说明 {{ icon('chevron',16) }}</summary><div>
+      {% if has_role('ADMIN') %}<p>先维护基础资料，再创建并发布航次。发布后计划与配额锁定。</p>{% endif %}
+      {% if has_role('SALES','REVIEWER') %}<p>保存草稿 → 提交审核 → 确认订舱。仅已确认订单占用舱位，审核时以最新余量为准。</p>{% endif %}
+      {% if has_role('REVIEWER') %}<p>不能审核自己创建的订舱。已确认舱位按当前可访问范围统计。</p>{% endif %}
+      {% if has_role('ANALYST') %}<p>经营指标统计全部日期的已确认订舱，不代表实际装船量；在报表中按计划离港日期筛选。</p>{% endif %}
+      <p>全部时间均为北京时间。</p>
+    </div></details>
+  </aside>
+</div>
+{% endblock %}
