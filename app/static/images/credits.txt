@@ -1,0 +1,5 @@
+﻿Photo: container-ship-ocean.jpg
+Photographer: Bent Van Aeken
+Source: https://unsplash.com/photos/an-aerial-view-of-a-cargo-ship-in-the-ocean-0A7YwYhZhWw
+License: Unsplash License, https://unsplash.com/license
+Downloaded: 2026-11-02
